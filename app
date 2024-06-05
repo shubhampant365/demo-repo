@@ -1,72 +1,82 @@
 <template>
-    <!-- Optional: Minimal UI, can be left empty if only toast messages are used -->
-    <template if:true={isProcessing}>
-        <lightning-spinner alternative-text="Processing" size="medium"></lightning-spinner>
-    </template>
+    <lightning-card title="Sending for Approval" icon-name="utility:approval">
+        <div class="slds-m-around_medium">
+            <template if:true={isProcessing}>
+                <lightning-spinner alternative-text="Processing" size="medium"></lightning-spinner>
+                <p>Sending record for approval...</p>
+            </template>
+            <template if:false={isProcessing}>
+                <p>{message}</p>
+            </template>
+        </div>
+    </lightning-card>
 </template>
 
 
 
 import { LightningElement, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import sendRecordForApproval from '@salesforce/apex/ApprovalProcessHandler.sendRecordForApproval';
+import submitForApproval from '@salesforce/apex/SubmitForApprovalController.submitForApproval';
 
-export default class SendForApproval extends LightningElement {
+export default class SubmitForApproval extends LightningElement {
     @api recordId;
-    isProcessing = true;  // To show a spinner or similar indicator
+    message;
+    messageClass;
 
-    connectedCallback() {
-        this.initiateApprovalProcess();
-    }
-
-    initiateApprovalProcess() {
-        sendRecordForApproval({ recordId: this.recordId })
+    handleSubmit() {
+        submitForApproval({ recordId: this.recordId })
             .then(() => {
-                this.showToast('Success', 'Record sent for approval successfully.', 'success');
+                this.message = 'Record submitted for approval successfully';
+                this.messageClass = 'slds-text-color_success';
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Success',
+                        message: this.message,
+                        variant: 'success',
+                    }),
+                );
             })
             .catch(error => {
-                this.showToast('Error', 'Failed to send record for approval: ' + error.body.message, 'error');
-            })
-            .finally(() => {
-                this.isProcessing = false;
-                this.closeQuickAction();
+                this.message = 'Error in submitting for approval: ' + error.body.message;
+                this.messageClass = 'slds-text-color_error';
+                this.dispatchEvent(
+                    new ShowToastEvent({
+                        title: 'Error',
+                        message: this.message,
+                        variant: 'error',
+                    }),
+                );
             });
     }
-
-    showToast(title, message, variant) {
-        this.dispatchEvent(new ShowToastEvent({ title, message, variant }));
-    }
-
-    closeQuickAction() {
-        const closeEvent = new CustomEvent('close');
-        this.dispatchEvent(closeEvent);
-    }
 }
 
 
 
-
-public with sharing class ApprovalProcessHandler {
+public with sharing class SubmitForApprovalController {
     @AuraEnabled
-    public static void sendRecordForApproval(Id recordId) {
-        try {
-            // Initialize the approval request
-            Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
-            req.setComments('Automatically sending for approval.');
-            req.setObjectId(recordId);
+    public static void submitForApproval(Id recordId) {
+        // Query the active approval process for the ServiceAppointment object
+        List<ProcessDefinition> processDefs = [
+            SELECT Id 
+            FROM ProcessDefinition 
+            WHERE TableEnumOrId = 'ServiceAppointment' 
+            AND IsActive = true 
+            LIMIT 1
+        ];
 
-            // Optionally specify the next approver if required
-            // req.setNextApproverIds(new List<Id>{ someUserId });
-
-            // Send the approval request
-            Approval.ProcessResult result = Approval.process(req);
-            
-            // You could log the result or handle it based on your business needs
-            System.debug('Approval request has been sent with the following result: ' + result);
-        } catch (Exception e) {
-            // Handle the exception
-            System.debug('Error while sending record for approval: ' + e.getMessage());
-            throw new AuraHandledException('Approval Process Error: ' + e.getMessage());
+        if (processDefs.isEmpty()) {
+            throw new AuraHandledException('No active approval process found for ServiceAppointment.');
         }
-    }
-}
+
+        // Create an approval request
+        Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
+        req.setComments('Submitted for approval');
+        req.setObjectId(recordId);
+        req.setProcessDefinitionId(processDefs[0].Id);  // Set the approval process ID
+
+        // Submit the approval request
+        Approval.ProcessResult result = Approval.process(req);
+        if (result.isSuccess()) {
+            System.debug('Successfully submitted for approval.');
+        } else {
+            throw new
