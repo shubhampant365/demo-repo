@@ -14,71 +14,57 @@
 
 
 
-import { LightningElement, api } from 'lwc';
-import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import submitForApproval from '@salesforce/apex/SubmitForApprovalController.submitForApproval';
+import { LightningElement, api, track } from 'lwc';
+import sendRecordForApproval from '@salesforce/apex/ApprovalProcessHandler.sendRecordForApproval';
 
-export default class SubmitForApproval extends LightningElement {
+export default class SendForApproval extends LightningElement {
     @api recordId;
-    message;
-    messageClass;
+    @track isProcessing = true;
+    @track message = '';
 
-    handleSubmit() {
-        submitForApproval({ recordId: this.recordId })
+    connectedCallback() {
+        if (!this.recordId) {
+            this.message = 'Record ID is not available.';
+            this.isProcessing = false;
+            return;
+        }
+        this.sendForApproval();
+    }
+
+    sendForApproval() {
+        sendRecordForApproval({ recordId: this.recordId })
             .then(() => {
-                this.message = 'Record submitted for approval successfully';
-                this.messageClass = 'slds-text-color_success';
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Success',
-                        message: this.message,
-                        variant: 'success',
-                    }),
-                );
+                this.message = 'Record sent for approval successfully.';
+                this.isProcessing = false;
             })
             .catch(error => {
-                this.message = 'Error in submitting for approval: ' + error.body.message;
-                this.messageClass = 'slds-text-color_error';
-                this.dispatchEvent(
-                    new ShowToastEvent({
-                        title: 'Error',
-                        message: this.message,
-                        variant: 'error',
-                    }),
-                );
+                this.message = 'Failed to send record for approval: ' + error.body.message;
+                this.isProcessing = false;
             });
     }
 }
 
 
-
- @AuraEnabled
-    public static void submitForApproval(Id recordId) {
-        // Query the active approval process for the ServiceAppointment object
-        List<ProcessDefinition> processDefs = [
-            SELECT Id 
-            FROM ProcessDefinition 
-            WHERE TableEnumOrId = 'ServiceAppointment' 
-            AND IsActive = true 
-            LIMIT 1
-        ];
-
-        if (processDefs.isEmpty()) {
-            throw new AuraHandledException('No active approval process found for ServiceAppointment.');
+public with sharing class ApprovalProcessHandler {
+    @AuraEnabled
+    public static void sendRecordForApproval(Id recordId) {
+        if (recordId == null) {
+            throw new AuraHandledException('The recordId is null.');
         }
 
-        // Create an approval request
-        Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
-        req.setComments('Submitted for approval');
-        req.setObjectId(recordId);
-        req.setProcessDefinitionId(processDefs[0].Id);  // Set the approval process ID
+        try {
+            Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
+            req.setComments('Automatically sending for approval.');
+            req.setObjectId(recordId);
+            req.setProcessDefinitionNameOrId('Your_Process_Developer_Name'); // Replace with the actual name
 
-        // Submit the approval request
-        Approval.ProcessResult result = Approval.process(req);
-        if (result.isSuccess()) {
-            System.debug('Successfully submitted for approval.');
-        } else {
-            throw new AuraHandledException('Error in submitting for approval');
+            Approval.ProcessResult result = Approval.process(req);
+            if (!result.isSuccess()) {
+                throw new AuraHandledException('Approval process failed to complete successfully.');
+            }
+        } catch (Exception e) {
+            throw new AuraHandledException('Approval Process Error: ' + e.getMessage());
         }
     }
 }
+
