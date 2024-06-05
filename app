@@ -1,12 +1,19 @@
 <template>
-    <lightning-card title="Sending for Approval" icon-name="utility:approval">
+    <lightning-card title="Send for Approval" icon-name="action:approval">
         <div class="slds-m-around_medium">
-            <template if:true={isProcessing}>
-                <lightning-spinner alternative-text="Processing" size="medium"></lightning-spinner>
-                <p>Sending record for approval...</p>
+            <lightning-button 
+                label="Send for Approval" 
+                onclick={handleSendForApproval} 
+                style="margin-bottom: 1rem;"></lightning-button>
+            <template if:true={successMessage}>
+                <div style="padding: 1rem; margin-bottom: 1rem; background-color: #d4edda; color: #155724; border: 1px solid #c3e6cb; border-radius: 0.25rem;">
+                    <p>{successMessage}</p>
+                </div>
             </template>
-            <template if:false={isProcessing}>
-                <p>{message}</p>
+            <template if:true={errorMessage}>
+                <div style="padding: 1rem; margin-bottom: 1rem; background-color: #f8d7da; color: #721c24; border: 1px solid #f5c6cb; border-radius: 0.25rem;">
+                    <p>{errorMessage}</p>
+                </div>
             </template>
         </div>
     </lightning-card>
@@ -14,73 +21,46 @@
 
 
 
+
+
 import { LightningElement, api, track } from 'lwc';
-import sendRecordForApproval from '@salesforce/apex/ApprovalProcessHandler.sendRecordForApproval';
+import submitForApproval from '@salesforce/apex/ApprovalController.submitForApproval';
 
 export default class SendForApproval extends LightningElement {
     @api recordId;
-    @track isProcessing = true;
-    @track message = '';
+    @track successMessage = '';
+    @track errorMessage = '';
 
-    connectedCallback() {
-        if (!this.recordId) {
-            this.message = 'Record ID is not available.';
-            this.isProcessing = false;
-            return;
-        }
-        this.sendForApproval();
-    }
-
-    sendForApproval() {
-        sendRecordForApproval({ recordId: this.recordId })
-            .then(() => {
-                this.message = 'Record sent for approval successfully.';
-                this.isProcessing = false;
+    handleSendForApproval() {
+        this.successMessage = '';
+        this.errorMessage = '';
+        
+        submitForApproval({ recordId: this.recordId })
+            .then(result => {
+                this.successMessage = 'Record submitted for approval successfully!';
             })
             .catch(error => {
-                this.message = 'Failed to send record for approval: ' + error.body.message;
-                this.isProcessing = false;
+                this.errorMessage = error.body.message;
             });
     }
 }
 
 
-public with sharing class ApprovalProcessHandler {
-    @AuraEnabled
-    public static void sendRecordForApproval(Id recordId) {
-        if (recordId == null) {
-            throw new AuraHandledException('The recordId is null.');
-        }
 
+public with sharing class ApprovalController {
+    @AuraEnabled
+    public static void submitForApproval(Id recordId) {
         try {
             Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
-            req.setComments('Automatically sending for approval.');
+            req.setComments('Submitted for approval from LWC');
             req.setObjectId(recordId);
-            req.setProcessDefinitionNameOrId('Your_Process_Developer_Name'); // Replace with the actual name
-
             Approval.ProcessResult result = Approval.process(req);
+            
             if (!result.isSuccess()) {
-                throw new AuraHandledException('Approval process failed to complete successfully.');
+                throw new AuraHandledException('Failed to submit for approval.');
             }
         } catch (Exception e) {
-            throw new AuraHandledException('Approval Process Error: ' + e.getMessage());
+            throw new AuraHandledException('Error during approval submission: ' + e.getMessage());
         }
     }
-}<?xml version="1.0" encoding="UTF-8"?>
-<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata" fqn="sendForApproval">
-    <apiVersion>52.0</apiVersion>
-    <isExposed>true</isExposed>
-    <targets>
-        <target>lightning__RecordPage</target>
-    </targets>
-    <targetConfigs>
-        <targetConfig targets="lightning__RecordPage">
-            <objects>
-                <object>ServiceAppointment</object>
-            </objects>
-        </targetConfig>
-    </targetConfigs>
-</LightningComponentBundle>
-
-
-
+}
