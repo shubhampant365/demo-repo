@@ -66,5 +66,21 @@ public with sharing class ApprovalProcessHandler {
             throw new AuraHandledException('Approval Process Error: ' + e.getMessage());
         }
     }
-}
+}<?xml version="1.0" encoding="UTF-8"?>
+<LightningComponentBundle xmlns="http://soap.sforce.com/2006/04/metadata" fqn="sendForApproval">
+    <apiVersion>52.0</apiVersion>
+    <isExposed>true</isExposed>
+    <targets>
+        <target>lightning__RecordPage</target>
+    </targets>
+    <targetConfigs>
+        <targetConfig targets="lightning__RecordPage">
+            <objects>
+                <object>ServiceAppointment</object>
+            </objects>
+        </targetConfig>
+    </targetConfigs>
+</LightningComponentBundle>
+
+
 
