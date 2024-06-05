@@ -52,8 +52,7 @@ export default class SubmitForApproval extends LightningElement {
 
 
 
-public with sharing class SubmitForApprovalController {
-    @AuraEnabled
+ @AuraEnabled
     public static void submitForApproval(Id recordId) {
         // Query the active approval process for the ServiceAppointment object
         List<ProcessDefinition> processDefs = [
@@ -79,4 +78,7 @@ public with sharing class SubmitForApprovalController {
         if (result.isSuccess()) {
             System.debug('Successfully submitted for approval.');
         } else {
-            throw new
+            throw new AuraHandledException('Error in submitting for approval');
+        }
+    }
+}
