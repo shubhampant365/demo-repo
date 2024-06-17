@@ -1,0 +1,102 @@
+<template>
+    <lightning-card>
+        <div style="padding: 1rem;">
+            <lightning-record-picker
+                label="Product"
+                object-api-name="Product2"
+                field-name="Name"
+                value={productId}
+                onchange={handleProductChange}
+                style="margin-bottom: 1rem;"
+            ></lightning-record-picker>
+            <lightning-input 
+                label="Quantity" 
+                value={quantity} 
+                onchange={handleQuantityChange}
+                style="margin-bottom: 1rem;"
+            ></lightning-input>
+            <lightning-textarea 
+                label="Defects/Remarks" 
+                value={remarks} 
+                onchange={handleRemarksChange}
+                style="margin-bottom: 1rem;"
+            ></lightning-textarea>
+            <lightning-button 
+                label="Save" 
+                onclick={handleSubmit}
+                style="margin-top: 1rem;"
+            ></lightning-button>
+        </div>
+    </lightning-card>
+</template>
+
+
+
+
+import { LightningElement, api, track } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { createRecord } from 'lightning/uiRecordApi';
+
+const WORK_ORDER_LINE_ITEM_OBJECT = 'WorkOrderLineItem';
+const FIELDS = {
+    WORK_ORDER_ID: 'WorkOrderId',
+    PRODUCT_ID: 'Product__c',
+    QUANTITY: 'Quantity__c',
+    REMARKS: 'Description'
+};
+
+export default class ServiceCampWoliCreate extends LightningElement {
+    @api recordId; // This is the WorkOrderId
+    @track productId = '';
+    @track quantity = '';
+    @track remarks = '';
+    
+    handleProductChange(event) {
+        this.productId = event.detail.recordId;
+    }
+
+    handleQuantityChange(event) {
+        this.quantity = event.target.value;
+    }
+
+    handleRemarksChange(event) {
+        this.remarks = event.target.value;
+    }
+
+    handleSubmit() {
+        if (this.productId && this.quantity) {
+            const fields = {};
+            fields[FIELDS.WORK_ORDER_ID] = this.recordId;
+            fields[FIELDS.PRODUCT_ID] = this.productId;
+            fields[FIELDS.QUANTITY] = this.quantity;
+            fields[FIELDS.REMARKS] = this.remarks;
+
+            const recordInput = { apiName: WORK_ORDER_LINE_ITEM_OBJECT, fields };
+            createRecord(recordInput)
+                .then(() => {
+                    this.showToast('Success', 'Record saved successfully', 'success');
+                    this.clearForm();
+                })
+                .catch(error => {
+                    this.showToast('Error', 'Error saving record: ' + error.body.message, 'error');
+                });
+        } else {
+            this.showToast('Error', 'Please fill out all required fields.', 'error');
+        }
+    }
+
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title,
+            message,
+            variant
+        });
+        this.dispatchEvent(event);
+    }
+
+    clearForm() {
+        this.productId = '';
+        this.quantity = '';
+        this.remarks = '';
+    }
+}
