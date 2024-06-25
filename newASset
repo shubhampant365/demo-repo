@@ -17,7 +17,7 @@
                 <div class="slds-m-bottom_medium">
                     <lightning-input label="Product Name" value={productDetails.Name} disabled class="slds-m-left_small"></lightning-input>
                     <lightning-input label="Product Category" value={productDetails.Family} disabled class="slds-m-left_small"></lightning-input>
-                    <lightning-input label="Product Subcategory" value={productDetails.Product_Subcategory__c} disabled class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Product Subcategory" value={productDetails.Product_Sub_Category__c} disabled class="slds-m-left_small"></lightning-input>
                 </div>
                 <div class="slds-m-bottom_medium">
                     <lightning-input type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange} data-id="dateOfPurchase" class="slds-m-left_small"></lightning-input>
@@ -38,10 +38,11 @@
 
 
 
+
 import { LightningElement, track, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import getProductDetails from '@salesforce/apex/ProductController.getProductDetails';
-import updateAssetDetails from '@salesforce/apex/ProductController.updateAssetDetails';
+import getProductDetailsBasedOnId from '@salesforce/apex/AssetOnboardingController.getProductDetailsBasedOnId';
+import updateAssetDetailsWithWorkOrder from '@salesforce/apex/AssetOnboardingController.updateAssetDetailsWithWorkOrder';
 
 export default class ProductSelector extends LightningElement {
     @api recordId; // Assuming this is the WorkOrderLineItem Id
@@ -64,7 +65,7 @@ export default class ProductSelector extends LightningElement {
 
     handleSubmit() {
         if (this.selectedProductId) {
-            getProductDetails({ productId: this.selectedProductId })
+            getProductDetailsBasedOnId({ productId: this.selectedProductId })
                 .then(result => {
                     this.productDetails = result;
                 })
@@ -86,7 +87,7 @@ export default class ProductSelector extends LightningElement {
     }
 
     handleSave() {
-        const assetDetails = {
+        updateAssetDetailsWithWorkOrder({
             workOrderLineItemId: this.recordId,
             dateOfPurchase: this.dateOfPurchase,
             dateOfInstallation: this.dateOfInstallation,
@@ -98,15 +99,13 @@ export default class ProductSelector extends LightningElement {
             remarks: this.remarks,
             rentalAsset: this.rentalAsset,
             productId: this.selectedProductId
-        };
-
-        updateAssetDetails({ assetDetails })
-            .then(() => {
-                this.showToast('Success', 'Asset details saved successfully', 'success');
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            });
+        })
+        .then(() => {
+            this.showToast('Success', 'Asset details saved successfully', 'success');
+        })
+        .catch(error => {
+            this.showToast('Error', error.body.message, 'error');
+        });
     }
 
     showToast(title, message, variant) {
