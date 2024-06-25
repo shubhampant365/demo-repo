@@ -1,50 +1,31 @@
-<template>
-    <template if:false={showProductDetails}>
-        <lightning-card title="Asset Details" class="slds-p-around_medium">
-            <!-- Spinner Section -->
-            <template if:true={isLoading}>
-                <div class="spinner-overlay">
-                    <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
-                </div>
-            </template>
+public with sharing class AssetOnboardingController {
+    
+    @AuraEnabled
+    public static Product2 getProductDetails(String productCode) {
+        return [SELECT Id, Name, ProductCode, Product_Category__c FROM Product2 WHERE ProductCode = :productCode LIMIT 1];
+    }
 
-            <!-- Form Section -->
-            <div class="form-section">
-                <lightning-button label="Scan Code" onclick={handleScan} disabled={isLoading}></lightning-button>
-                <lightning-input label="Enter Item Code" value={itemCode} onchange={handleInputChange} disabled={isItemCodeDisabled || isLoading}></lightning-input>
-                <lightning-input type="file" label="Upload Invoice" onchange={handleFileUpload} disabled={isLoading}></lightning-input>
-                <lightning-button label="Submit" onclick={handleCallout} disabled={isLoading}></lightning-button>
-                <template if:true={isSerialIdLinkedResult}>
-                    <lightning-button label="Transfer the Asset" onclick={handleTransferClick} disabled={isLoading}></lightning-button>
-                </template>
-            </div>
-        </lightning-card>
-    </template>
+    @AuraEnabled
+    public static void updateAssetDetails(String workOrderLineItemId, String dateOfPurchase, String dateOfInstallation, String salesProductCode,
+                                          String invoiceNumber, String warrantyStartDate, String warrantyEndDate, String sourceOfPurchase,
+                                          String remarks, Boolean rentalAsset, Id productId) {
+        WorkOrderLineItem woli = [SELECT AssetId FROM WorkOrderLineItem WHERE Id = :workOrderLineItemId LIMIT 1];
+        Asset asset = [SELECT Id FROM Asset WHERE Id = :woli.AssetId LIMIT 1];
+        asset.Date_of_Purchase__c = Date.valueOf(dateOfPurchase);
+        asset.Date_of_Installation__c = Date.valueOf(dateOfInstallation);
+        asset.Sales_Product_Code__c = salesProductCode;
+        asset.Invoice_Number__c = invoiceNumber;
+        asset.Warranty_Start_Date__c = Date.valueOf(warrantyStartDate);
+        asset.Warranty_End_Date__c = Date.valueOf(warrantyEndDate);
+        asset.Source_of_Purchase__c = sourceOfPurchase;
+        asset.Remarks__c = remarks;
+        asset.Rental_Asset__c = rentalAsset;
+        asset.Product2Id = productId;
+        update asset;
+    }
 
-    <template if:true={showProductDetails}>
-        <lightning-card title="Product Details" class="slds-p-around_medium">
-            <div class="slds-p-around_medium">
-                <lightning-input label="Product Name" value={productDetails.Name} disabled></lightning-input>
-                <lightning-input label="Product Code" value={productDetails.ProductCode} disabled></lightning-input>
-                <lightning-input label="Product Category" value={productDetails.Product_Category__c} disabled></lightning-input>
-                
-                <!-- Editable Fields -->
-                <lightning-input type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Date of Installation" value={dateOfInstallation} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Sales Product Code" value={salesProductCode} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Invoice Number" value={invoiceNumber} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Warranty Start Date" value={warrantyStartDate} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Warranty End Date" value={warrantyEndDate} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Source of Purchase" value={sourceOfPurchase} onchange={handleInputChange}></lightning-input>
-                <lightning-textarea label="Remarks" value={remarks} onchange={handleInputChange}></lightning-textarea>
-                <lightning-input type="checkbox" label="Rental Asset" checked={rentalAsset} onchange={handleCheckboxChange}></lightning-input>
-                
-                <lightning-button label="Save" onclick={handleSave}></lightning-button>
-            </div>
-        </lightning-card>
-    </template>
-</template>
-
+    // Existing methods like makeMockApiCall, isSerialIdLinked, saveAttachment, transfertAnAsset
+}
 
 
 import { LightningElement, track, api } from 'lwc';
@@ -54,14 +35,11 @@ import isSerialIdLinked from '@salesforce/apex/AssetOnboardingController.isSeria
 import uploadFile from '@salesforce/apex/AssetOnboardingController.saveAttachment';
 import transferAsset from '@salesforce/apex/AssetOnboardingController.transfertAnAsset';
 import getProductDetails from '@salesforce/apex/AssetOnboardingController.getProductDetails';
-import getAssetDetails from '@salesforce/apex/AssetOnboardingController.getAssetDetails';
 import updateAssetDetails from '@salesforce/apex/AssetOnboardingController.updateAssetDetails';
 import { getBarcodeScanner } from 'lightning/mobileCapabilities';
 
 export default class AssetOnboarding extends LightningElement {
     @track itemCode = '';
-    assetId;
-    productId;
     barcodeScanner;
     @api recordId;
     @track isSerialIdLinkedResult = false;
@@ -81,6 +59,7 @@ export default class AssetOnboarding extends LightningElement {
     @track sourceOfPurchase;
     @track remarks;
     @track rentalAsset = false;
+    productId;
 
     connectedCallback() {
         this.barcodeScanner = getBarcodeScanner();
@@ -220,18 +199,6 @@ export default class AssetOnboarding extends LightningElement {
                 this.productDetails = result;
                 this.productId = result.Id;
                 this.showProductDetails = true;
-                this.fetchAssetDetails();
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            });
-    }
-
-    fetchAssetDetails() {
-        getAssetDetails({ workOrderLineItemId: this.recordId })
-            .then(result => {
-                this.assetId = result.Id;
-                this.showProductDetails = true;
             })
             .catch(error => {
                 this.showToast('Error', error.body.message, 'error');
@@ -241,7 +208,7 @@ export default class AssetOnboarding extends LightningElement {
     handleSave() {
         this.isLoading = true;
         updateAssetDetails({
-            assetId: this.assetId,
+            workOrderLineItemId: this.recordId,
             dateOfPurchase: this.dateOfPurchase,
             dateOfInstallation: this.dateOfInstallation,
             salesProductCode: this.salesProductCode,
@@ -279,67 +246,6 @@ export default class AssetOnboarding extends LightningElement {
     }
 }
 
-
-public with sharing class AssetOnboardingController {
-    
-    @AuraEnabled
-    public static Asset getAssetDetails(String workOrderLineItemId) {
-        WorkOrderLineItem woli = [SELECT AssetId FROM WorkOrderLineItem WHERE Id = :workOrderLineItemId LIMIT 1];
-        return [SELECT Id, Name, Product2Id FROM Asset WHERE Id = :woli.AssetId LIMIT 1];
-    }
-
-    @AuraEnabled
-    public static Product2 getProductDetails(String productCode) {
-        return [SELECT Id, Name, ProductCode, Product_Category__c FROM Product2 WHERE ProductCode = :productCode LIMIT 1];
-    }
-
-    @AuraEnabled
-    public static void updateAssetDetails(Id assetId, String dateOfPurchase, String dateOfInstallation, String salesProductCode,
-                                          String invoiceNumber, String warrantyStartDate, String warrantyEndDate, String sourceOfPurchase,
-                                          String remarks, Boolean rentalAsset, Id productId) {
-        Asset asset = [SELECT Id, Date_of_Purchase__c, Date_of_Installation__c, Sales_Product_Code__c, Invoice_Number__c, 
-                              Warranty_Start_Date__c, Warranty_End_Date__c, Source_of_Purchase__c, Remarks__c, Rental_Asset__c, 
-                              Product2Id 
-                       FROM Asset 
-                       WHERE Id = :assetId LIMIT 1];
-        if (dateOfPurchase != null) asset.Date_of_Purchase__c = Date.valueOf(dateOfPurchase);
-        if (dateOfInstallation != null) asset.Date_of_Installation__c = Date.valueOf(dateOfInstallation);
-        asset.Sales_Product_Code__c = salesProductCode;
-        asset.Invoice_Number__c = invoiceNumber;
-        if (warrantyStartDate != null) asset.Warranty_Start_Date__c = Date.valueOf(warrantyStartDate);
-        if (warrantyEndDate != null) asset.Warranty_End_Date__c = Date.valueOf(warrantyEndDate);
-        asset.Source_of_Purchase__c = sourceOfPurchase;
-        asset.Remarks__c = remarks;
-        asset.Rental_Asset__c = rentalAsset;
-        asset.Product2Id = productId;
-        update asset;
-    }
-
-    // Existing methods like makeMockApiCall, isSerialIdLinked, saveAttachment, transfertAnAsset
-    @AuraEnabled
-    public static String makeMockApiCall(String qrCodes, String recordId) {
-        // Implement the mock API call logic here
-        return '{"LstProductDetailsApiList":[{"Status":"VALID","ProductCode":"1234","ResponseMessage":"Success"}]}';
-    }
-
-    @AuraEnabled
-    public static Boolean isSerialIdLinked(String serialId) {
-        // Implement the logic to check if the serial ID is linked
-        return false;
-    }
-
-    @AuraEnabled
-    public static String saveAttachment(String parentId, String fileName, String base64Data) {
-        // Implement the logic to save the attachment
-        return 'Attachment Saved';
-    }
-
-    @AuraEnabled
-    public static String transfertAnAsset(String recordID, String previousAssetId, String accountId) {
-        // Implement the logic to transfer the asset
-        return 'Asset Transferred';
-    }
-}
 
 
 .spinner-overlay {
