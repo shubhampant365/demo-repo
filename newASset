@@ -1,231 +1,92 @@
 <template>
-    <template if:false={showProductDetails}>
-        <lightning-card title="Asset Details" class="slds-p-around_medium">
-            <!-- Spinner Section -->
-            <template if:true={isLoading}>
-                <div class="spinner-overlay">
-                    <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+    <lightning-card title="Product Selector" class="slds-p-around_medium">
+        <template if:false={productDetails}>
+            <div class="slds-m-bottom_medium">
+                <lightning-record-picker
+                    label="Products"
+                    placeholder="Search Products..."
+                    object-api-name="Product2"
+                    onsuccess={handleProductSelection}
+                ></lightning-record-picker>
+                <lightning-button label="Submit" onclick={handleSubmit} class="slds-m-top_medium"></lightning-button>
+            </div>
+        </template>
+
+        <template if:true={productDetails}>
+            <lightning-card title="Product Details" class="slds-p-around_medium">
+                <div class="slds-m-bottom_medium">
+                    <lightning-input label="Product Name" value={productDetails.Name} disabled class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Product Category" value={productDetails.Family} disabled class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Product Subcategory" value={productDetails.Product_Subcategory__c} disabled class="slds-m-left_small"></lightning-input>
                 </div>
-            </template>
-
-            <!-- Form Section -->
-            <div class="form-section">
-                <lightning-button label="Scan Code" onclick={handleScan}></lightning-button>
-                <lightning-input label="Enter Item Code" value={itemCode} onchange={handleInputChange} disabled={isItemCodeDisabled}></lightning-input>
-                <lightning-input type="file" label="Upload Invoice" onchange={handleFileUpload}></lightning-input>
-                <lightning-button label="Submit" onclick={handleCallout}></lightning-button>
-                <template if:true={isSerialIdLinkedResult}>
-                    <lightning-button label="Transfer the Asset" onclick={handleTransferClick}></lightning-button>
-                </template>
-            </div>
-        </lightning-card>
-    </template>
-
-    <template if:true={showProductDetails}>
-        <lightning-card title="Product Details" class="slds-p-around_medium">
-            <div class="slds-p-around_medium">
-                <lightning-input label="Product Name" value={productDetails.Name} disabled></lightning-input>
-                <lightning-input label="Product Code" value={productDetails.ProductCode} disabled></lightning-input>
-                <lightning-input label="Product Category" value={productDetails.Product_Category__c} disabled></lightning-input>
-                
-                <!-- Editable Fields -->
-                <lightning-input type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Date of Installation" value={dateOfInstallation} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Sales Product Code" value={salesProductCode} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Invoice Number" value={invoiceNumber} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Warranty Start Date" value={warrantyStartDate} onchange={handleInputChange}></lightning-input>
-                <lightning-input type="date" label="Warranty End Date" value={warrantyEndDate} onchange={handleInputChange}></lightning-input>
-                <lightning-input label="Source of Purchase" value={sourceOfPurchase} onchange={handleInputChange}></lightning-input>
-                <lightning-textarea label="Remarks" value={remarks} onchange={handleInputChange}></lightning-textarea>
-                <lightning-input type="checkbox" label="Rental Asset" checked={rentalAsset} onchange={handleCheckboxChange}></lightning-input>
-                
-                <lightning-button label="Save" onclick={handleSave}></lightning-button>
-            </div>
-        </lightning-card>
-    </template>
+                <div class="slds-m-bottom_medium">
+                    <lightning-input type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange} data-id="dateOfPurchase" class="slds-m-left_small"></lightning-input>
+                    <lightning-input type="date" label="Date of Installation" value={dateOfInstallation} onchange={handleInputChange} data-id="dateOfInstallation" class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Sales Product Code" value={salesProductCode} onchange={handleInputChange} data-id="salesProductCode" class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Invoice Number" value={invoiceNumber} onchange={handleInputChange} data-id="invoiceNumber" class="slds-m-left_small"></lightning-input>
+                    <lightning-input type="date" label="Warranty Start Date" value={warrantyStartDate} onchange={handleInputChange} data-id="warrantyStartDate" class="slds-m-left_small"></lightning-input>
+                    <lightning-input type="date" label="Warranty End Date" value={warrantyEndDate} onchange={handleInputChange} data-id="warrantyEndDate" class="slds-m-left_small"></lightning-input>
+                    <lightning-input label="Source of Purchase" value={sourceOfPurchase} onchange={handleInputChange} data-id="sourceOfPurchase" class="slds-m-left_small"></lightning-input>
+                    <lightning-textarea label="Remarks" value={remarks} onchange={handleInputChange} data-id="remarks" class="slds-m-left_small"></lightning-textarea>
+                    <lightning-input type="checkbox" label="Rental Asset" checked={rentalAsset} onchange={handleCheckboxChange} data-id="rentalAsset" class="slds-m-left_small"></lightning-input>
+                </div>
+                <lightning-button label="Save" onclick={handleSave} class="slds-m-top_medium slds-m-left_small"></lightning-button>
+            </lightning-card>
+        </template>
+    </lightning-card>
 </template>
+
 
 
 import { LightningElement, track, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
-import makeMockApiCall from '@salesforce/apex/AssetOnboardingController.makeMockApiCall';
-import isSerialIdLinked from '@salesforce/apex/AssetOnboardingController.isSerialIdLinked';
-import uploadFile from '@salesforce/apex/AssetOnboardingController.saveAttachment';
-import transferAsset from '@salesforce/apex/AssetOnboardingController.transfertAnAsset';
-import getProductDetails from '@salesforce/apex/AssetOnboardingController.getProductDetails';
-import updateAssetDetails from '@salesforce/apex/AssetOnboardingController.updateAssetDetails';
-import { getBarcodeScanner } from 'lightning/mobileCapabilities';
+import getProductDetails from '@salesforce/apex/ProductController.getProductDetails';
+import updateAssetDetails from '@salesforce/apex/ProductController.updateAssetDetails';
 
-export default class AssetOnboarding extends LightningElement {
-    @track itemCode = '';
-    barcodeScanner;
-    @api recordId;
-    @track isSerialIdLinkedResult = false;
-    @track isItemCodeDisabled = false;
-    @track previousAssetId;
-    @track previousAccount;
-    @track isLoading = false;
-    @track showProductDetails = false;
+export default class ProductSelector extends LightningElement {
+    @api recordId; // Assuming this is the WorkOrderLineItem Id
     @track productDetails;
-
-    @track dateOfPurchase;
-    @track dateOfInstallation;
-    @track salesProductCode;
-    @track invoiceNumber;
-    @track warrantyStartDate;
-    @track warrantyEndDate;
-    @track sourceOfPurchase;
-    @track remarks;
+    @track dateOfPurchase = '';
+    @track dateOfInstallation = '';
+    @track salesProductCode = '';
+    @track invoiceNumber = '';
+    @track warrantyStartDate = '';
+    @track warrantyEndDate = '';
+    @track sourceOfPurchase = '';
+    @track remarks = '';
     @track rentalAsset = false;
-    productId;
 
-    connectedCallback() {
-        this.barcodeScanner = getBarcodeScanner();
+    selectedProductId;
+
+    handleProductSelection(event) {
+        this.selectedProductId = event.detail.recordId;
+    }
+
+    handleSubmit() {
+        if (this.selectedProductId) {
+            getProductDetails({ productId: this.selectedProductId })
+                .then(result => {
+                    this.productDetails = result;
+                })
+                .catch(error => {
+                    this.showToast('Error', 'Failed to retrieve product details', 'error');
+                });
+        } else {
+            this.showToast('Error', 'Please select a product', 'error');
+        }
     }
 
     handleInputChange(event) {
-        const field = event.target.label.replace(/ /g, '');
-        this[field.charAt(0).toLowerCase() + field.slice(1)] = event.target.value;
+        const field = event.target.dataset.id;
+        this[field] = event.target.value;
     }
 
     handleCheckboxChange(event) {
         this.rentalAsset = event.target.checked;
     }
 
-    handleFileUpload(event) {
-        const file = event.target.files[0];
-        const reader = new FileReader();
-        
-        reader.onload = () => {
-            this.fileData = {
-                fileName: file.name,
-                base64Data: reader.result.split(',')[1]
-            };
-            this.handleSaveDocument(); 
-        };
-
-        reader.readAsDataURL(file);
-    }
-    
-    handleSaveDocument() {
-        if (!this.fileData) {
-            return;
-        }
-        this.isLoading = true;
-        uploadFile({ parentId: this.recordId, fileName: this.fileData.fileName, base64Data: this.fileData.base64Data })
-            .then(result => {
-                this.showSuccessToast('Document uploaded successfully');
-                console.log('Document saved successfully:', result);
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            })
-            .finally(() => {
-                this.isLoading = false;
-            });
-    }
-
-    handleScan() {
-        if (this.barcodeScanner.isAvailable()) {
-            let scanningOptions = {
-                barcodeTypes: ["code128", "code39", "code93", "ean13", "ean8", "upca", "upce", "qr", "datamatrix", "itf", "pdf417"], 
-                instructionText: "Position barcode in the scanner view.\nPress x to stop.",
-                successText: "Successful Scan!"
-            };
-            this.barcodeScanner.scan(scanningOptions)
-                .then((results) => {
-                    this.itemCode = results[0].value;
-                    this.isItemCodeDisabled = true;
-
-                    // Force the UI to update
-                    this.template.querySelector('lightning-input').value = this.itemCode;
-                })
-                .catch((error) => {
-                    this.showToast('Error', error.body.message, 'error');
-                })
-                .finally(() => {
-                    this.barcodeScanner.dismiss();
-                });
-        } else {
-            this.showToast('Error', 'Barcode scanner is not available', 'error');
-        }
-    }
-
-    handleCallout() {
-        if (!this.itemCode) {
-            this.showToast('Warning', 'Please enter a value in the input field.', 'warning');
-            return;
-        }
-
-        this.isLoading = true;
-        isSerialIdLinked({ serialId: this.itemCode })
-            .then(result => {
-                this.isSerialIdLinkedResult = result.isLinked;
-                this.previousAssetId = result.recordId;
-                this.previousAccount = result.AccountId;
-                if (result.isLinked) {
-                    this.showToast('Warning', 'The scanned serial ID is already linked with an existing asset.', 'warning');
-                } else {
-                    this.makeCallout();
-                }
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            })
-            .finally(() => {
-                this.isLoading = false;
-            });
-    }
-
-    handleTransferClick() {
-        this.isLoading = true;
-        transferAsset({ recordID: this.recordId, previousAssetId: this.previousAssetId, accountId: this.previousAccount }).then(result => {
-            this.showToast('Success', result, 'success');
-        }).catch(error => {
-            this.showToast('Error', error.body.message, 'error');
-        }).finally(() => {
-            this.isLoading = false;
-        });
-    }
-
-    makeCallout() {
-        makeMockApiCall({ qrCodes: [this.itemCode], recordId: this.recordId })
-            .then(result => {
-                const parsedResult = JSON.parse(result);
-                if (parsedResult && parsedResult.LstProductDetailsApiList && parsedResult.LstProductDetailsApiList.length > 0) {
-                    const qrCodeResponse = parsedResult.LstProductDetailsApiList[0];
-                    if (qrCodeResponse.Status === 'INVALID') {
-                        this.showToast('Error', qrCodeResponse.ResponseMessage, 'error');
-                    } else {
-                        this.fetchProductDetails(qrCodeResponse.ProductCode);
-                    }
-                } else {
-                    this.showToast('Error', 'No product details found in the response', 'error');
-                }
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            })
-            .finally(() => {
-                this.isLoading = false;
-            });
-    }
-
-    fetchProductDetails(productCode) {
-        getProductDetails({ productCode })
-            .then(result => {
-                this.productDetails = result;
-                this.productId = result.Id;
-                this.showProductDetails = true;
-            })
-            .catch(error => {
-                this.showToast('Error', error.body.message, 'error');
-            });
-    }
-
     handleSave() {
-        this.isLoading = true;
-        updateAssetDetails({
+        const assetDetails = {
             workOrderLineItemId: this.recordId,
             dateOfPurchase: this.dateOfPurchase,
             dateOfInstallation: this.dateOfInstallation,
@@ -236,17 +97,15 @@ export default class AssetOnboarding extends LightningElement {
             sourceOfPurchase: this.sourceOfPurchase,
             remarks: this.remarks,
             rentalAsset: this.rentalAsset,
-            productId: this.productId
-        })
+            productId: this.selectedProductId
+        };
+
+        updateAssetDetails({ assetDetails })
             .then(() => {
-                this.showSuccessToast('Product details saved successfully');
-                this.showProductDetails = false; // Hide product details screen after save
+                this.showToast('Success', 'Asset details saved successfully', 'success');
             })
             .catch(error => {
                 this.showToast('Error', error.body.message, 'error');
-            })
-            .finally(() => {
-                this.isLoading = false;
             });
     }
 
@@ -257,9 +116,5 @@ export default class AssetOnboarding extends LightningElement {
             variant: variant
         });
         this.dispatchEvent(event);
-    }
-
-    showSuccessToast(message) {
-        this.showToast('Success', message, 'success');
     }
 }
