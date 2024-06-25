@@ -1,0 +1,363 @@
+<template>
+    <template if:false={showProductDetails}>
+        <lightning-card title="Asset Details" class="slds-p-around_medium">
+            <!-- Spinner Section -->
+            <template if:true={isLoading}>
+                <div class="spinner-overlay">
+                    <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+                </div>
+            </template>
+
+            <!-- Form Section -->
+            <div class="form-section">
+                <lightning-button label="Scan Code" onclick={handleScan} disabled={isLoading}></lightning-button>
+                <lightning-input label="Enter Item Code" value={itemCode} onchange={handleInputChange} disabled={isItemCodeDisabled || isLoading}></lightning-input>
+                <lightning-input type="file" label="Upload Invoice" onchange={handleFileUpload} disabled={isLoading}></lightning-input>
+                <lightning-button label="Submit" onclick={handleCallout} disabled={isLoading}></lightning-button>
+                <template if:true={isSerialIdLinkedResult}>
+                    <lightning-button label="Transfer the Asset" onclick={handleTransferClick} disabled={isLoading}></lightning-button>
+                </template>
+            </div>
+        </lightning-card>
+    </template>
+
+    <template if:true={showProductDetails}>
+        <lightning-card title="Product Details" class="slds-p-around_medium">
+            <div class="slds-p-around_medium">
+                <lightning-input label="Product Name" value={productDetails.Name} disabled></lightning-input>
+                <lightning-input label="Product Code" value={productDetails.ProductCode} disabled></lightning-input>
+                <lightning-input label="Product Category" value={productDetails.Product_Category__c} disabled></lightning-input>
+                
+                <!-- Editable Fields -->
+                <lightning-input type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange}></lightning-input>
+                <lightning-input type="date" label="Date of Installation" value={dateOfInstallation} onchange={handleInputChange}></lightning-input>
+                <lightning-input label="Sales Product Code" value={salesProductCode} onchange={handleInputChange}></lightning-input>
+                <lightning-input label="Invoice Number" value={invoiceNumber} onchange={handleInputChange}></lightning-input>
+                <lightning-input type="date" label="Warranty Start Date" value={warrantyStartDate} onchange={handleInputChange}></lightning-input>
+                <lightning-input type="date" label="Warranty End Date" value={warrantyEndDate} onchange={handleInputChange}></lightning-input>
+                <lightning-input label="Source of Purchase" value={sourceOfPurchase} onchange={handleInputChange}></lightning-input>
+                <lightning-textarea label="Remarks" value={remarks} onchange={handleInputChange}></lightning-textarea>
+                <lightning-input type="checkbox" label="Rental Asset" checked={rentalAsset} onchange={handleCheckboxChange}></lightning-input>
+                
+                <lightning-button label="Save" onclick={handleSave}></lightning-button>
+            </div>
+        </lightning-card>
+    </template>
+</template>
+
+
+
+import { LightningElement, track, api } from 'lwc';
+import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import makeMockApiCall from '@salesforce/apex/AssetOnboardingController.makeMockApiCall';
+import isSerialIdLinked from '@salesforce/apex/AssetOnboardingController.isSerialIdLinked';
+import uploadFile from '@salesforce/apex/AssetOnboardingController.saveAttachment';
+import transferAsset from '@salesforce/apex/AssetOnboardingController.transfertAnAsset';
+import getProductDetails from '@salesforce/apex/AssetOnboardingController.getProductDetails';
+import getAssetDetails from '@salesforce/apex/AssetOnboardingController.getAssetDetails';
+import updateAssetDetails from '@salesforce/apex/AssetOnboardingController.updateAssetDetails';
+import { getBarcodeScanner } from 'lightning/mobileCapabilities';
+
+export default class AssetOnboarding extends LightningElement {
+    @track itemCode = '';
+    assetId;
+    productId;
+    barcodeScanner;
+    @api recordId;
+    @track isSerialIdLinkedResult = false;
+    @track isItemCodeDisabled = false;
+    @track previousAssetId;
+    @track previousAccount;
+    @track isLoading = false;
+    @track showProductDetails = false;
+    @track productDetails;
+
+    @track dateOfPurchase;
+    @track dateOfInstallation;
+    @track salesProductCode;
+    @track invoiceNumber;
+    @track warrantyStartDate;
+    @track warrantyEndDate;
+    @track sourceOfPurchase;
+    @track remarks;
+    @track rentalAsset = false;
+
+    connectedCallback() {
+        this.barcodeScanner = getBarcodeScanner();
+    }
+
+    handleInputChange(event) {
+        const field = event.target.label.replace(/ /g, '');
+        this[field.charAt(0).toLowerCase() + field.slice(1)] = event.target.value;
+    }
+
+    handleCheckboxChange(event) {
+        this.rentalAsset = event.target.checked;
+    }
+
+    handleFileUpload(event) {
+        const file = event.target.files[0];
+        const reader = new FileReader();
+        
+        reader.onload = () => {
+            this.fileData = {
+                fileName: file.name,
+                base64Data: reader.result.split(',')[1]
+            };
+            this.handleSaveDocument(); 
+        };
+
+        reader.readAsDataURL(file);
+    }
+    
+    handleSaveDocument() {
+        if (!this.fileData) {
+            return;
+        }
+        this.isLoading = true;
+        uploadFile({ parentId: this.recordId, fileName: this.fileData.fileName, base64Data: this.fileData.base64Data })
+            .then(result => {
+                this.showSuccessToast('Document uploaded successfully');
+                console.log('Document saved successfully:', result);
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    handleScan() {
+        if (this.barcodeScanner.isAvailable()) {
+            let scanningOptions = {
+                barcodeTypes: ["code128", "code39", "code93", "ean13", "ean8", "upca", "upce", "qr", "datamatrix", "itf", "pdf417"], 
+                instructionText: "Position barcode in the scanner view.\nPress x to stop.",
+                successText: "Successful Scan!"
+            };
+            this.barcodeScanner.scan(scanningOptions)
+                .then((results) => {
+                    this.itemCode = results[0].value;
+                    this.isItemCodeDisabled = true;
+
+                    // Force the UI to update
+                    this.template.querySelector('lightning-input').value = this.itemCode;
+                })
+                .catch((error) => {
+                    this.showToast('Error', error.body.message, 'error');
+                })
+                .finally(() => {
+                    this.barcodeScanner.dismiss();
+                });
+        } else {
+            this.showToast('Error', 'Barcode scanner is not available', 'error');
+        }
+    }
+
+    handleCallout() {
+        if (!this.itemCode) {
+            this.showToast('Warning', 'Please enter a value in the input field.', 'warning');
+            return;
+        }
+
+        this.isLoading = true;
+        isSerialIdLinked({ serialId: this.itemCode })
+            .then(result => {
+                this.isSerialIdLinkedResult = result.isLinked;
+                this.previousAssetId = result.recordId;
+                this.previousAccount = result.AccountId;
+                if (result.isLinked) {
+                    this.showToast('Warning', 'The scanned serial ID is already linked with an existing asset.', 'warning');
+                } else {
+                    this.makeCallout();
+                }
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    handleTransferClick() {
+        this.isLoading = true;
+        transferAsset({ recordID: this.recordId, previousAssetId: this.previousAssetId, accountId: this.previousAccount }).then(result => {
+            this.showToast('Success', result, 'success');
+        }).catch(error => {
+            this.showToast('Error', error.body.message, 'error');
+        }).finally(() => {
+            this.isLoading = false;
+        });
+    }
+
+    makeCallout() {
+        makeMockApiCall({ qrCodes: [this.itemCode], recordId: this.recordId })
+            .then(result => {
+                const parsedResult = JSON.parse(result);
+                if (parsedResult && parsedResult.LstProductDetailsApiList && parsedResult.LstProductDetailsApiList.length > 0) {
+                    const qrCodeResponse = parsedResult.LstProductDetailsApiList[0];
+                    if (qrCodeResponse.Status === 'INVALID') {
+                        this.showToast('Error', qrCodeResponse.ResponseMessage, 'error');
+                    } else {
+                        this.fetchProductDetails(qrCodeResponse.ProductCode);
+                    }
+                } else {
+                    this.showToast('Error', 'No product details found in the response', 'error');
+                }
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    fetchProductDetails(productCode) {
+        getProductDetails({ productCode })
+            .then(result => {
+                this.productDetails = result;
+                this.productId = result.Id;
+                this.showProductDetails = true;
+                this.fetchAssetDetails();
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            });
+    }
+
+    fetchAssetDetails() {
+        getAssetDetails({ workOrderLineItemId: this.recordId })
+            .then(result => {
+                this.assetId = result.Id;
+                this.showProductDetails = true;
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            });
+    }
+
+    handleSave() {
+        this.isLoading = true;
+        updateAssetDetails({
+            assetId: this.assetId,
+            dateOfPurchase: this.dateOfPurchase,
+            dateOfInstallation: this.dateOfInstallation,
+            salesProductCode: this.salesProductCode,
+            invoiceNumber: this.invoiceNumber,
+            warrantyStartDate: this.warrantyStartDate,
+            warrantyEndDate: this.warrantyEndDate,
+            sourceOfPurchase: this.sourceOfPurchase,
+            remarks: this.remarks,
+            rentalAsset: this.rentalAsset,
+            productId: this.productId
+        })
+            .then(() => {
+                this.showSuccessToast('Product details saved successfully');
+                this.showProductDetails = false; // Hide product details screen after save
+            })
+            .catch(error => {
+                this.showToast('Error', error.body.message, 'error');
+            })
+            .finally(() => {
+                this.isLoading = false;
+            });
+    }
+
+    showToast(title, message, variant) {
+        const event = new ShowToastEvent({
+            title: title,
+            message: message,
+            variant: variant
+        });
+        this.dispatchEvent(event);
+    }
+
+    showSuccessToast(message) {
+        this.showToast('Success', message, 'success');
+    }
+}
+
+
+public with sharing class AssetOnboardingController {
+    
+    @AuraEnabled
+    public static Asset getAssetDetails(String workOrderLineItemId) {
+        WorkOrderLineItem woli = [SELECT AssetId FROM WorkOrderLineItem WHERE Id = :workOrderLineItemId LIMIT 1];
+        return [SELECT Id, Name, Product2Id FROM Asset WHERE Id = :woli.AssetId LIMIT 1];
+    }
+
+    @AuraEnabled
+    public static Product2 getProductDetails(String productCode) {
+        return [SELECT Id, Name, ProductCode, Product_Category__c FROM Product2 WHERE ProductCode = :productCode LIMIT 1];
+    }
+
+    @AuraEnabled
+    public static void updateAssetDetails(Id assetId, String dateOfPurchase, String dateOfInstallation, String salesProductCode,
+                                          String invoiceNumber, String warrantyStartDate, String warrantyEndDate, String sourceOfPurchase,
+                                          String remarks, Boolean rentalAsset, Id productId) {
+        Asset asset = [SELECT Id, Date_of_Purchase__c, Date_of_Installation__c, Sales_Product_Code__c, Invoice_Number__c, 
+                              Warranty_Start_Date__c, Warranty_End_Date__c, Source_of_Purchase__c, Remarks__c, Rental_Asset__c, 
+                              Product2Id 
+                       FROM Asset 
+                       WHERE Id = :assetId LIMIT 1];
+        if (dateOfPurchase != null) asset.Date_of_Purchase__c = Date.valueOf(dateOfPurchase);
+        if (dateOfInstallation != null) asset.Date_of_Installation__c = Date.valueOf(dateOfInstallation);
+        asset.Sales_Product_Code__c = salesProductCode;
+        asset.Invoice_Number__c = invoiceNumber;
+        if (warrantyStartDate != null) asset.Warranty_Start_Date__c = Date.valueOf(warrantyStartDate);
+        if (warrantyEndDate != null) asset.Warranty_End_Date__c = Date.valueOf(warrantyEndDate);
+        asset.Source_of_Purchase__c = sourceOfPurchase;
+        asset.Remarks__c = remarks;
+        asset.Rental_Asset__c = rentalAsset;
+        asset.Product2Id = productId;
+        update asset;
+    }
+
+    // Existing methods like makeMockApiCall, isSerialIdLinked, saveAttachment, transfertAnAsset
+    @AuraEnabled
+    public static String makeMockApiCall(String qrCodes, String recordId) {
+        // Implement the mock API call logic here
+        return '{"LstProductDetailsApiList":[{"Status":"VALID","ProductCode":"1234","ResponseMessage":"Success"}]}';
+    }
+
+    @AuraEnabled
+    public static Boolean isSerialIdLinked(String serialId) {
+        // Implement the logic to check if the serial ID is linked
+        return false;
+    }
+
+    @AuraEnabled
+    public static String saveAttachment(String parentId, String fileName, String base64Data) {
+        // Implement the logic to save the attachment
+        return 'Attachment Saved';
+    }
+
+    @AuraEnabled
+    public static String transfertAnAsset(String recordID, String previousAssetId, String accountId) {
+        // Implement the logic to transfer the asset
+        return 'Asset Transferred';
+    }
+}
+
+
+.spinner-overlay {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 100;
+    background: rgba(255, 255, 255, 0.8);
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.form-section {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
