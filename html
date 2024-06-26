@@ -1,0 +1,50 @@
+<template>
+    <template if:false={showProductDetails}>
+        <lightning-card class="slds-p-around_medium">
+            <!-- Spinner Section -->
+            <template if:true={isLoading}>
+                <div class="spinner-overlay">
+                    <lightning-spinner alternative-text="Loading" size="large"></lightning-spinner>
+                </div>
+            </template>
+
+            <!-- Form Section -->
+            <div class="slds-p-around_medium">
+                <lightning-input class="slds-m-top_medium" label="Enter Item Code" value={itemCode} data-id="itemCode" onchange={handleInputChangesCode} disabled={isItemCodeDisabled}></lightning-input>
+                <lightning-button class="slds-m-top_medium" label="Scan Item Code" onclick={handleScanItemCode}></lightning-button>
+
+                <lightning-input class="slds-m-top_medium" label="Enter Serial Code" value={serialCode} data-id="serialCode" onchange={handleInputChangeSerialCode} disabled={isSerialCodeDisabled}></lightning-input>
+                <lightning-button class="slds-m-top_medium" label="Scan Serial Code" onclick={handleScanSerialCode}></lightning-button>
+
+                <lightning-input class="slds-m-top_medium" type="file" label="Upload Invoice" onchange={handleFileUpload}></lightning-input>
+                <lightning-button class="slds-m-top_medium" label="Submit" onclick={handleCallout}></lightning-button>
+                <template if:true={isSerialIdLinkedResult}>
+                    <lightning-button class="slds-m-top_medium" label="Transfer the Asset" onclick={handleTransferClick}></lightning-button>
+                </template>
+            </div>
+        </lightning-card>
+    </template>
+
+    <template if:true={showProductDetails}>
+        <lightning-card title="Product Details" class="slds-p-around_medium">
+            <div class="slds-p-around_medium">
+                <lightning-input class="slds-m-top_medium" label="Product Name" value={productDetails.Name} disabled></lightning-input>
+                <lightning-input class="slds-m-top_medium" label="Product Code" value={productDetails.ProductCode} disabled></lightning-input>
+                <lightning-input class="slds-m-top_medium" label="Product Category" value={productDetails.Product_Category__c} disabled></lightning-input>
+
+                <!-- Editable Fields -->
+                <lightning-input class="slds-m-top_medium" type="date" label="Date of Purchase" value={dateOfPurchase} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" type="date" label="Date of Installation" value={dateOfInstallation} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" label="Sales Product Code" value={salesProductCode} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" label="Invoice Number" value={invoiceNumber} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" type="date" label="Warranty Start Date" value={warrantyStartDate} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" type="date" label="Warranty End Date" value={warrantyEndDate} onchange={handleInputChange}></lightning-input>
+                <lightning-input class="slds-m-top_medium" label="Source of Purchase" value={sourceOfPurchase} onchange={handleInputChange}></lightning-input>
+                <lightning-textarea class="slds-m-top_medium" label="Remarks" value={remarks} onchange={handleInputChange}></lightning-textarea>
+                <lightning-input class="slds-m-top_medium" type="checkbox" label="Rental Asset" checked={rentalAsset} onchange={handleCheckboxChange}></lightning-input>
+
+                <lightning-button class="slds-m-top_medium" label="Save" onclick={handleSave}></lightning-button>
+            </div>
+        </lightning-card>
+    </template>
+</template>
